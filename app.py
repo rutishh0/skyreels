@@ -20,7 +20,7 @@ app = FastAPI(
 # -----------------------------------------------------------
 # Load the model (fits a 44 GB RTX‑4000)
 # -----------------------------------------------------------
-MODEL_ID = "tolgacangoz/SkyReels-V2-DF-1.3B-540P-Diffusers"
+model_id = "tolgacangoz/SkyReels-V2-DF-14B-540P-Diffusers"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 print("🔄 Loading SkyReels model …")
