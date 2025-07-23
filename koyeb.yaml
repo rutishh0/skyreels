@@ -1,10 +1,7 @@
-name: skyreels-api
+name: skyreels
 services:
   - name: api
     type: web
     runtime: python3
-    env:
-      - name: HF_HOME
-        value: /cache
     build_command: pip install -r requirements.txt
     run_command: uvicorn app:app --host 0.0.0.0 --port 8000
