@@ -1,39 +1,40 @@
 import os
-import torch
 from uuid import uuid4
+
+import torch
+from diffusers import DiffusionPipeline
 from fastapi import FastAPI, Body
 from fastapi.responses import FileResponse, JSONResponse
-from diffusers import DiffusionPipeline
 
 # -----------------------------------------------------------
-# FastAPI app
+# FastAPI application
 # -----------------------------------------------------------
 app = FastAPI(
     title="SkyReels Text‑to‑Video API",
     description="Generate short clips with SkyReels‑V2 (1.3 B, 540 P)",
-    version="1.0"
+    version="1.1",
 )
 
 # -----------------------------------------------------------
-# Model: use the 1.3 B Diffusers export so it fits 44 GB VRAM
+# Load the model (fits a 44 GB RTX‑4000)
 # -----------------------------------------------------------
-print("🔄 Loading SkyReels model…")
-model_id = "tolgacangoz/SkyReels-V2-DF-1.3B-540P-Diffusers"
+MODEL_ID = "tolgacangoz/SkyReels-V2-DF-1.3B-540P-Diffusers"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+print("🔄 Loading SkyReels model …")
 pipe = DiffusionPipeline.from_pretrained(
-    model_id,
+    MODEL_ID,
     torch_dtype=torch.float16,
-    trust_remote_code=True,                   # allow custom code
-    custom_pipeline="skyreels_v2_diffusion_forcing"  # load pipeline file in repo
-).to("cuda" if torch.cuda.is_available() else "cpu")
+    trust_remote_code=True,       # picks up custom code if the repo provides it
+).to(DEVICE)
 
-# (Optional) memory helpers
+# Optional memory helpers
 pipe.enable_model_cpu_offload()
 pipe.enable_vae_slicing()
 
-print("✅ SkyReels model ready!")
+print("✅ Model ready!")
 
-# Folder to keep outputs
+# Folder to keep generated clips
 os.makedirs("outputs", exist_ok=True)
 
 # -----------------------------------------------------------
@@ -48,38 +49,39 @@ def health_check():
 def generate_video(
     prompt: str = Body(..., embed=True),
     num_frames: int = Body(16, embed=True),
-    fps: int = Body(8, embed=True)
+    fps: int = Body(8, embed=True),
 ):
     """
-    POST JSON:
+    Example request:
       {
         "prompt": "A cyberpunk city skyline at night",
-        "num_frames": 200,
-        "fps": 24
+        "num_frames": 24,
+        "fps": 8
       }
-    Returns: {"video_path": "outputs/<uuid>.gif"}
+    Response:
+      { "video_path": "outputs/<uuid>.gif" }
     """
     try:
-        print(f"🎬 Generating {num_frames}‑frame clip for: {prompt}")
+        print(f"🎬 Generating {num_frames}‑frame clip for prompt: {prompt!r}")
         result = pipe(prompt, num_frames=num_frames)
-        frames = result.frames                       # list[PIL.Image]
+        frames = result.frames  # list[ PIL.Image ]
 
-        # Save as GIF (runs everywhere, no ffmpeg)
+        # Save as GIF (no ffmpeg needed)
         outfile = f"outputs/{uuid4().hex}.gif"
         frames[0].save(
             outfile,
             save_all=True,
             append_images=frames[1:],
             duration=int(1000 / fps),
-            loop=0
+            loop=0,
         )
 
         print(f"✅ Saved: {outfile}")
         return JSONResponse({"video_path": outfile})
 
-    except Exception as e:
-        print("❌ Generation failed:", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+    except Exception as err:
+        print("❌ Generation failed:", err)
+        return JSONResponse({"error": str(err)}, status_code=500)
 
 
 @app.get("/download/{filename}")
