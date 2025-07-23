@@ -8,3 +8,5 @@ diffusers @ git+https://github.com/huggingface/diffusers.git
 ftfy>=6.1.1
 timm>=0.9.12
 sentencepiece>=0.1.99
+pillow
+numpy
