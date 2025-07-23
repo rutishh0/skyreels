@@ -10,3 +10,4 @@ timm>=0.9.12
 sentencepiece>=0.1.99
 pillow
 numpy
+imageio[ffmpeg]
