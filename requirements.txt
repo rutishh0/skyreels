@@ -4,3 +4,4 @@ diffusers
 accelerate
 fastapi
 uvicorn
+diffusers @ git+https://github.com/huggingface/diffusers.git
