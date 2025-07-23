@@ -1,33 +1,44 @@
 import os
 import torch
+from uuid import uuid4
 from fastapi import FastAPI, Body
 from fastapi.responses import FileResponse, JSONResponse
 from diffusers import DiffusionPipeline
-from uuid import uuid4
 
-# ✅ FastAPI app
+# -----------------------------------------------------------
+# FastAPI app
+# -----------------------------------------------------------
 app = FastAPI(
-    title="SkyReels Text-to-Video API",
-    description="Generate short videos using SkyReels-V2-DF-14B-720P",
+    title="SkyReels Text‑to‑Video API",
+    description="Generate short clips with SkyReels‑V2 (1.3 B, 540 P)",
     version="1.0"
 )
 
-# ✅ Load model once at startup
-print("🔄 Loading SkyReels model... This might take a few minutes on first run.")
+# -----------------------------------------------------------
+# Model: use the 1.3 B Diffusers export so it fits 44 GB VRAM
+# -----------------------------------------------------------
+print("🔄 Loading SkyReels model…")
 model_id = "tolgacangoz/SkyReels-V2-DF-1.3B-540P-Diffusers"
 
 pipe = DiffusionPipeline.from_pretrained(
     model_id,
     torch_dtype=torch.float16,
-    trust_remote_code=True          # custom pipeline class
+    trust_remote_code=True,                   # allow custom code
+    custom_pipeline="skyreels_v2_diffusion_forcing"  # load pipeline file in repo
 ).to("cuda" if torch.cuda.is_available() else "cpu")
 
-print("✅ SkyReels model loaded successfully!")
+# (Optional) memory helpers
+pipe.enable_model_cpu_offload()
+pipe.enable_vae_slicing()
 
-# ✅ Output folder for videos
+print("✅ SkyReels model ready!")
+
+# Folder to keep outputs
 os.makedirs("outputs", exist_ok=True)
 
-
+# -----------------------------------------------------------
+# Routes
+# -----------------------------------------------------------
 @app.get("/")
 def health_check():
     return {"status": "running", "message": "SkyReels API is live!"}
@@ -36,40 +47,45 @@ def health_check():
 @app.post("/generate")
 def generate_video(
     prompt: str = Body(..., embed=True),
-    num_frames: int = Body(16, embed=True)
+    num_frames: int = Body(16, embed=True),
+    fps: int = Body(8, embed=True)
 ):
     """
-    Generate a short video from a text prompt.
-    - prompt: text describing the scene
-    - num_frames: how many frames to generate (default 16)
+    POST JSON:
+      {
+        "prompt": "A cyberpunk city skyline at night",
+        "num_frames": 200,
+        "fps": 24
+      }
+    Returns: {"video_path": "outputs/<uuid>.gif"}
     """
-
     try:
-        # 🔄 Generate frames
-        print(f"🎬 Generating video for prompt: {prompt}")
-        video_frames = pipe(prompt=prompt, num_frames=num_frames).frames
+        print(f"🎬 Generating {num_frames}‑frame clip for: {prompt}")
+        result = pipe(prompt, num_frames=num_frames)
+        frames = result.frames                       # list[PIL.Image]
 
-        # ✅ Save video as mp4
-        output_filename = f"outputs/{uuid4().hex}.mp4"
-        video_frames[0].save(output_filename, format="MP4")
+        # Save as GIF (runs everywhere, no ffmpeg)
+        outfile = f"outputs/{uuid4().hex}.gif"
+        frames[0].save(
+            outfile,
+            save_all=True,
+            append_images=frames[1:],
+            duration=int(1000 / fps),
+            loop=0
+        )
 
-        print(f"✅ Video saved at {output_filename}")
-
-        # Return the file path (you can also upload to S3 or another CDN)
-        return JSONResponse({"video_path": output_filename})
+        print(f"✅ Saved: {outfile}")
+        return JSONResponse({"video_path": outfile})
 
     except Exception as e:
-        print("❌ Error generating video:", e)
+        print("❌ Generation failed:", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/download/{filename}")
 def download_video(filename: str):
-    """
-    Download a generated video by filename.
-    """
-    file_path = os.path.join("outputs", filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, media_type="video/mp4")
-    else:
-        return JSONResponse({"error": "File not found"}, status_code=404)
+    """Download a generated clip."""
+    path = os.path.join("outputs", filename)
+    if os.path.exists(path):
+        return FileResponse(path, media_type="image/gif")
+    return JSONResponse({"error": "File not found"}, status_code=404)
