@@ -14,12 +14,12 @@ app = FastAPI(
 
 # ✅ Load model once at startup
 print("🔄 Loading SkyReels model... This might take a few minutes on first run.")
-model_id = "Skywork/SkyReels-V2-DF-14B-720P"
+model_id = "tolgacangoz/SkyReels-V2-DF-1.3B-540P-Diffusers"
 
 pipe = DiffusionPipeline.from_pretrained(
     model_id,
     torch_dtype=torch.float16,
-    variant="fp16"
+    trust_remote_code=True          # custom pipeline class
 ).to("cuda" if torch.cuda.is_available() else "cpu")
 
 print("✅ SkyReels model loaded successfully!")
