@@ -25,12 +25,14 @@ print("🔄 Loading SkyReels model …")
 pipe = DiffusionPipeline.from_pretrained(
     MODEL_ID,
     torch_dtype=torch.float16,
-    trust_remote_code=True,       # picks up custom code if the repo provides it
+    trust_remote_code=True,  # picks up custom code if the repo provides it
 ).to(DEVICE)
 
-# Optional memory helpers
+# Optional memory helper
 pipe.enable_model_cpu_offload()
-pipe.enable_vae_slicing()
+# This pipeline doesn’t expose enable_vae_slicing(); remove or guard it:
+# if hasattr(pipe, "enable_vae_slicing"):
+#     pipe.enable_vae_slicing()
 
 print("✅ Model ready!")
 
@@ -64,9 +66,8 @@ def generate_video(
     try:
         print(f"🎬 Generating {num_frames}‑frame clip for prompt: {prompt!r}")
         result = pipe(prompt, num_frames=num_frames)
-        frames = result.frames  # list[ PIL.Image ]
+        frames = result.frames  # list[PIL.Image]
 
-        # Save as GIF (no ffmpeg needed)
         outfile = f"outputs/{uuid4().hex}.gif"
         frames[0].save(
             outfile,
